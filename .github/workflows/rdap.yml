@@ -1,0 +1,51 @@
+name: RDAP
+
+on:
+  push:
+    branches: [master]
+
+env:
+  LOCAL_FILE: data/dns.json
+  REMOTE_FILE: data/dns.remote.json
+  IANA_URL: https://data.iana.org/rdap/dns.json
+
+jobs:
+  check-modified:
+    name: Check RDAP is modified?
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get md5sum of local file
+        id: dns-json
+        run: echo "LOCALHASH=$(md5sum $LOCAL_FILE | awk '{ print $1 }')" >> $GITHUB_OUTPUT
+      
+      - name: Get md5sum of remote file
+        id: dns-json-remote
+        run: |
+          curl -s $IANA_URL >> $REMOTE_FILE
+          echo "REMOTEHASH=$(md5sum $REMOTE_FILE | awk '{ print $1 }')" >> $GITHUB_OUTPUT
+
+      - name: Check modified
+        run: |
+          if [ ${{ steps.dns-json-remote.outputs.REMOTEHASH }} = ${{ steps.dns-json.outputs.LOCALHASH }} ]; then
+            exit 0
+          fi
+
+      - name: Is modified
+        run: |
+          rm $LOCAL_FILE
+          mv $REMOTE_FILE $LOCAL_FILE
+
+      - name: Commit files
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add $LOCAL_FILE
+          git commit -m "ci: update $LOCAL_FILE"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
